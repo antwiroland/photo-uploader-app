@@ -2,7 +2,7 @@ name: Build, Push to ECR and Generate Deployment Artifacts
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "master" ]
 
 permissions:
   id-token: write
@@ -25,13 +25,13 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build with Gradle
-        run: ./gradlew build --no-daemon -x test 
+        run: ./gradlew build --no-daemon -x test  # Skip tests
 
       - name: Configure AWS Credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }}
-          aws-region: eu-west-1
+          aws-region: eu-central-1
 
       - name: Login to Amazon ECR
         id: login-ecr
@@ -54,7 +54,7 @@ jobs:
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY_NAME }}
-          AWS_REGION: eu-west-1
+          AWS_REGION: eu-central-1
         run: |
           # Get the latest task definition using family name
           echo "Searching for latest task definition for family: java-full-stack-Task"
@@ -68,11 +68,11 @@ jobs:
           fi
           
           # Get values from CloudFormation outputs
-          DB_ENDPOINT=$(aws cloudformation describe-stacks --stack-name ibra-cfn-infrastructure --query "Stacks[0].Outputs[?OutputKey=='RDSInstanceEndpoint'].OutputValue" --output text)
-          DB_SECRET_ARN=$(aws cloudformation describe-stacks --stack-name ibra-cfn-infrastructure --query "Stacks[0].Outputs[?OutputKey=='DBSecretArn'].OutputValue" --output text)
-          S3_BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name ibra-cfn-infrastructure --query "Stacks[0].Outputs[?OutputKey=='S3BucketName'].OutputValue" --output text)
-          TASK_EXEC_ROLE_ARN=$(aws cloudformation describe-stacks --stack-name ibra-cfn-infrastructure --query "Stacks[0].Outputs[?OutputKey=='ECSTaskExecutionRoleArn'].OutputValue" --output text)
-          TASK_ROLE_ARN=$(aws cloudformation describe-stacks --stack-name ibra-cfn-infrastructure --query "Stacks[0].Outputs[?OutputKey=='ECSTaskRoleArn'].OutputValue" --output text)
+          DB_ENDPOINT=$(aws cloudformation describe-stacks --stack-name ${{ secrets.STACK_NAME }} --query "Stacks[0].Outputs[?OutputKey=='RDSInstanceEndpoint'].OutputValue" --output text)
+          DB_SECRET_ARN=$(aws cloudformation describe-stacks --stack-name ${{ secrets.STACK_NAME }} --query "Stacks[0].Outputs[?OutputKey=='DBSecretArn'].OutputValue" --output text)
+          S3_BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name ${{ secrets.STACK_NAME }} --query "Stacks[0].Outputs[?OutputKey=='S3BucketName'].OutputValue" --output text)
+          TASK_EXEC_ROLE_ARN=$(aws cloudformation describe-stacks --stack-name ${{ secrets.STACK_NAME }} --query "Stacks[0].Outputs[?OutputKey=='ECSTaskExecutionRoleArn'].OutputValue" --output text)
+          TASK_ROLE_ARN=$(aws cloudformation describe-stacks --stack-name ${{ secrets.STACK_NAME }} --query "Stacks[0].Outputs[?OutputKey=='ECSTaskRoleArn'].OutputValue" --output text)
           
           echo "DB Endpoint: $DB_ENDPOINT"
           echo "DB Secret ARN: $DB_SECRET_ARN"
@@ -129,7 +129,7 @@ jobs:
                   },
                   {
                     "name": "AWS_REGION",
-                    "value": "eu-west-1"
+                    "value": "eu-central-1"
                   }
                 ],
                 "secrets": [
@@ -167,8 +167,7 @@ jobs:
 
       - name: Upload Deployment Artifacts to S3
         run: |
-          # Get the artifact bucket name from CloudFormation
-          ARTIFACT_BUCKET=$(aws cloudformation describe-stacks --stack-name ibra-cfn-infrastructure --query "Stacks[0].Outputs[?OutputKey=='ArtifactBucketName'].OutputValue" --output text)
+          ARTIFACT_BUCKET=$(aws cloudformation describe-stacks --stack-name ${{ secrets.STACK_NAME }}  --query "Stacks[0].Outputs[?OutputKey=='ArtifactBucketName'].OutputValue" --output text)
           echo "Using artifact bucket: $ARTIFACT_BUCKET"
           
           # Upload the ZIP file to S3
@@ -180,8 +179,7 @@ jobs:
 
       - name: Trigger CodePipeline Execution
         run: |
-          # Use the pipeline name from CloudFormation output instead of a hardcoded name.
-          PIPELINE_NAME=$(aws cloudformation describe-stacks --stack-name ibra-cfn-infrastructure --query "Stacks[0].Outputs[?OutputKey=='CodePipelineName'].OutputValue" --output text)
+          PIPELINE_NAME=$(aws cloudformation describe-stacks --stack-name ${{ secrets.STACK_NAME }} --query "Stacks[0].Outputs[?OutputKey=='CodePipelineName'].OutputValue" --output text)
           echo "Starting pipeline: $PIPELINE_NAME"
           
           # Manually start the pipeline after uploading artifacts
