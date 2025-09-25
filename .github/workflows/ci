@@ -2,7 +2,7 @@ name: Build, Push to ECR and Generate Deployment Artifacts
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "main" ]
 
 permissions:
   id-token: write
@@ -25,7 +25,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build with Gradle
-        run: ./gradlew build --no-daemon -x test  # Skip tests
+        run: ./gradlew build --no-daemon -x test 
 
 
       - name: Configure AWS Credentials via OIDC
